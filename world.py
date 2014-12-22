@@ -4,23 +4,24 @@ import const
 
 
 class World:
-	___worldWidth = 500
-	___worldHeight = 500
-	___world = None
-	___entities = []
+	_worldWidth = 500
+	_worldHeight = 500
+	_world = None
+	_entities = []
 
 	def __init__(self, width, height, people):
-		self.___worldWidth = width
-		self.___worldHeight = height
-		self.___world = [[None for x in range(self.___worldHeight)] for y in range(self.___worldWidth)] 
+		self._worldWidth = width
+		self._worldHeight = height
+		self._world = [[None for x in range(self._worldHeight)] for y in range(self._worldWidth)] 
 		for i in range(people):
-			thing = entity.Entity(self.___worldWidth,self.___worldHeight)
-			self.___entities.append(thing)
+			thing = entity.Entity(self._worldWidth,self._worldHeight)
+			self._entities.append(thing)
 			pos = thing.getPos()
-			self.___world[pos[0]][pos[1]] = thing
+			self._world[pos[0]][pos[1]] = thing
 
 	def checkProximities(self, thing):
 		nearby = []
+		canSee = []
 		pos = thing.getPos()
 		x = pos[0]
 		y = pos[1]
@@ -28,32 +29,35 @@ class World:
 			for j in range(y-const.interactDist,y+const.interactDist):
 				if i!=x and j!=y:
 					#j,i b/c 2d arrays index backwards
-					nearby.append(self.___world[j][i])
+					nearby.append(self._world[j][i])
+
+		for i in range(x-const.seeDist,x+const.seeDist):
+			for j in range(y-const.seeDist,y+const.seeDist):
+				if i!=x and j!=y:
+					#j,i b/c 2d arrays index backwards
+					canSee.append(self._world[j][i])
+
+		thing.setCanSee(canSee)
 		thing.setNearby(nearby)
 
-	def interact(self,one,two):
-		one.interact(two)
-		two.interact(one)
-
 	def entityUpdate(self,old,thing):
-		self.___world[old[0]][old[1]] = None
+		self._world[old[0]][old[1]] = None
 		new = thing.getPos()
 		if new[0] < 0:
 			new[0] = 0
-		elif new[0] > self.___worldWidth-1:
-			new[0] = self.___worldWidth-1
+		elif new[0] > self._worldWidth-1:
+			new[0] = self._worldWidth-1
 
 		if new[1] < 0:
 			new[1] = 0
-		elif new[1] > self.___worldWidth-1:
-			new[1] = self.___worldWidth-1
+		elif new[1] > self._worldWidth-1:
+			new[1] = self._worldWidth-1
 		thing.setPos(new)
-		self.___world[new[0]][new[1]] = thing
+		self._world[new[0]][new[1]] = thing
 
 	def perTick(self):
-		for e in self.___entities:
+		for e in self._entities:
 			pos = e.getPos()
 			e.perTick()
 			self.entityUpdate(pos,e)
 			self.checkProximities(e)
-			e.interact()
