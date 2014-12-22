@@ -6,27 +6,27 @@ marryGender = const.genders[0]
 marryChance = 10
 
 class Entity:
-	___personality = ''
-	___gender = ''
-	___friends = []
-	___spouse = None
-	___pos = [0,0]
-	___nearby = []
-
-
 	def __init__(self,pos1,pos2,personality):
 		print("new person")
 		self.___gender = random.choice(const.genders)
+		self.___pos = [0,0]
 		self.___pos[0] = pos1
 		self.___pos[1] = pos2
 		self.___personality = personality
+		self.___nearby = []
+		self.___friends = []
+		self.___spouse = None
 
 	def __init__(self,width,height):
 		print("new person")
 		self.___personality = random.choice(const.personalities)
 		self.___gender = random.choice(const.genders)
+		self.___pos = [0,0]
 		self.___pos[0] = random.randint(0,width-1)
 		self.___pos[1] = random.randint(0,height-1)
+		self.___nearby = []
+		self.___friends = []
+		self.___spouse = None
 
 	def interact(self):
 		for other in self.___nearby:

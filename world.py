@@ -12,7 +12,7 @@ class World:
 	def __init__(self, width, height, people):
 		self.___worldWidth = width
 		self.___worldHeight = height
-		self.___world = [[None for x in range(self.___worldHeight)] for x in range(self.___worldWidth)] 
+		self.___world = [[None for x in range(self.___worldHeight)] for y in range(self.___worldWidth)] 
 		for i in range(people):
 			thing = entity.Entity(self.___worldWidth,self.___worldHeight)
 			self.___entities.append(thing)
@@ -26,8 +26,9 @@ class World:
 		y = pos[1]
 		for i in range(x-const.interactDist,x+const.interactDist):
 			for j in range(y-const.interactDist,y+const.interactDist):
-				if i!=0 and j!=0:
-					nearby.append(self.___world[i][j])
+				if i!=x and j!=y:
+					#j,i b/c 2d arrays index backwards
+					nearby.append(self.___world[j][i])
 		thing.setNearby(nearby)
 
 	def interact(self,one,two):
