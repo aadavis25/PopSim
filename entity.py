@@ -1,35 +1,29 @@
-#entity
-import const
-import random
+# entity
+
 
 class Entity:
-	def __init__(self,pos1,pos2,personality):
-		self._pos = [0,0]
-		self._pos[0] = pos1
-		self._pos[1] = pos2
-		self._nearby = []
+    def __init__(self, pos):
+        self._pos = pos
+        self._nearby = []
+        self._dim = [1, 1]
 
-	def __init__(self,width,height):
-		self._pos = [0,0]
-		self._pos[0] = random.randint(0,width-1)
-		self._pos[1] = random.randint(0,height-1)
-		self._nearby = []
+    def interact(self):
+        pass
 
-	def interact(self):
-		pass
+    def tick(self):
+        pass
 
-	def perTick(self):
-		pass
+    def get_pos(self):
+        return self._pos
 
-	def getPos(self):
-		return self._pos
+    def set_pos(self, pos):
+        self._pos = pos
 
-	def setPos(self, pos):
-		self._pos = pos
-		print("a guy is at " + str(self.getPos()))
+    def set_pos(self, pos):
+        self._pos = pos
 
-	def setNearby(self,array):
-		self._nearby = array
+    def set_nearby(self, array):
+        self._nearby = array
 
-
-
+    def get_dim(self):
+        return self._dim
