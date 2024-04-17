@@ -22,7 +22,7 @@ class Human(entity.Entity):
         self._can_see = []
         self._spouse = None
         self._race = race
-        self._energy = 100
+        self._energy = 3600
         self._napping = False
         self._house = None
         self._target = [None, 0]
@@ -31,7 +31,7 @@ class Human(entity.Entity):
 
     def interact(self):
         for i in range(0, min(const.max_interactions_per_tick, len(self._nearby))):
-            other = self._nearby[i]
+            other = self._nearby[random.randint(0, len(self._nearby) - 1)]
             if self._target[0] in self._nearby:
                 other = self._target[0]
                 self._target = [None, 0]
@@ -54,13 +54,13 @@ class Human(entity.Entity):
                         # print("MARRIAGE")
                         self.get_married(other)
             if type(other) is obelysk.Obelysk:
-                if other is self._world.get_ob_for_race(self.get_race()):
+                if other is self._race.get_obelysk():
                     self._the_call = 0
 
     def get_married(self, other):
         other.set_spouse(self)
         self.set_spouse(other)
-        house = House(self._world.get_ob_for_race(self.get_race()).get_pos(), self)
+        house = House(self._race.get_obelysk().get_pos(), self)
         self._house = house
         other._house = house
         self._world.put_thing(house)
@@ -71,15 +71,21 @@ class Human(entity.Entity):
             # start = time.time()
             self.look_around()
             # stop = time.time()
-            # print("1: " + str(stop - start))
+            # one = stop - start
             # start = time.time()
             self.interact()
             # stop = time.time()
-            # print("2: " + str(stop - start))
+            # two = stop - start
             # start = time.time()
             self.whereto()
             # stop = time.time()
-            # print("3: " + str(stop - start))
+            # three = stop - start
+            # if (one > two and one > three):
+            #     print(1)
+            # elif (two > one and two > three):
+            #     print(2)
+            # elif (three > two and three > two):
+            #     print(3)
             self._energy -= 1
         else:
             self.nap()
@@ -87,21 +93,22 @@ class Human(entity.Entity):
     def look_around(self):
         self._can_see = []
         self._nearby = []
-        for e in self._world.get_entities():
-            dist = math.dist(self.get_pos(), e.get_pos())
-            if dist < const.interact_dist:
-                self._nearby.append(e)
-            if dist < const.see_dist:
-                self._can_see.append(e)
+        node = self._world.get_at(self.get_pos())
+        if not node.get_see_from_here() and not node.get_interact_from_here():
+            node.set_see_from_here(self._world.get_nodes_within(self.get_pos(), const.see_dist))
+            node.set_interact_from_here(self._world.get_nodes_within(self.get_pos(), const.interact_dist))
+
+        for see_node in node.get_see_from_here():
+            self._can_see.extend(see_node.get_entities())
+        for int_node in node.get_interact_from_here():
+            self._nearby.extend(int_node.get_entities())
 
     def whereto(self):
-        # print(str(self.get_pos()) + " move toward " + str(target.get_pos()))
-        if self._target[0] and (self._target[1] == 300 or
-                                const.how_far(self.get_pos(), self._target[0].get_pos()) > const.see_dist):
+        if self._target[0] and self._target[1] >= 300 and type(self._target[0]) is not obelysk.Obelysk:
             self._target = [None, 0]
         if not self._target[0]:
             if self._the_call > const.max_call:
-                self._target = [self._world.get_ob_for_race(self.get_race()), 0]
+                self._target = [self.get_race().get_obelysk(), 0]
             else:
                 # self.look_around()
                 for e in self._can_see:
@@ -114,24 +121,22 @@ class Human(entity.Entity):
                             mem = self.remember(e)
                             if e in self._friends:
                                 if self._world.get_time() - mem.get_time() >= const.want_to_see_ticks:
-                                    self._target = self._world.get_ob_for_race(e.get_race())
+                                    self._target = [e, 0]
                                     self.call(e)
-                            if self._world.get_time() - mem.get_time() >= const.want_to_see_ticks * 10:
-                                self._target = [e, 0]
-                                self.call(e)
+                                    break
             # print(str(self.get_pos()) + " move rand")
         if self._target[0]:
+            # print(str(self.get_pos()) + " move toward " + str(self._target[0].get_pos()))
             self.move_toward(self._target[0])
             self._target[1] += 1
         else:
-            self.move_toward(self._world.get_ob_for_race(self.get_race()) if not self._house else self._house)
-        self.validate_pos()
-
-    def validate_pos(self):
-        if self._pos[0] > self._world.get_max_dim():
-            self._pos[0] = self._world.get_max_dim()
-        if self._pos[1] > self._world.get_max_dim():
-            self._pos[1] = self._world.get_max_dim()
+            for e in self._friends:
+                mem = self.remember(e)
+                if self._world.get_time() - mem.get_time() >= const.want_to_see_ticks:
+                    self._target = [e, -9999]
+                    break
+            if not self._target[0]:
+                self.move_toward(self.get_race().get_obelysk() if not self._house else self._house)
 
     def call(self, other):
         other.set_target([self, 0])
@@ -144,7 +149,7 @@ class Human(entity.Entity):
         pos = other_entity.get_pos()
         delta_x = self._pos[0] - pos[0]
         delta_y = self._pos[1] - pos[1]
-        ratio = abs(delta_x / delta_y if delta_y != 0 else math.inf)
+        ratio = abs(delta_x / delta_y) if delta_y != 0 else math.inf
         if abs(delta_x) > 0 and ratio > .5:
             self._pos[0] -= (1 if delta_x > 0 else -1) if delta_x != 0 else 0
         if abs(delta_y) > 0 and ratio < 2:

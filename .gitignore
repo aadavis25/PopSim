@@ -1,3 +1,6 @@
-__pycache__/const.cpython-34.pyc
-__pycache__/entity.cpython-34.pyc
-__pycache__/world.cpython-34.pyc
+__pycache__/
+/.idea/
+/bin/
+/include/
+/venv/
+/pyvenv.cfg

@@ -2,10 +2,12 @@
 
 
 class Entity:
-    def __init__(self, pos):
+    def __init__(self, pos, dim=None):
+        if dim is None:
+            dim = [1, 1]
         self._pos = pos
         self._nearby = []
-        self._dim = [1, 1]
+        self._dim = dim
 
     def interact(self):
         pass
@@ -15,9 +17,6 @@ class Entity:
 
     def get_pos(self):
         return self._pos
-
-    def set_pos(self, pos):
-        self._pos = pos
 
     def set_pos(self, pos):
         self._pos = pos

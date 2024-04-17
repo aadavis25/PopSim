@@ -3,6 +3,8 @@ class WorldSquare:
         self._pos = pos
         self._entities = []
         self._neighbors = []
+        self._see_from_here = []
+        self._interact_from_here = []
 
     def get_entities(self):
         return self._entities
@@ -21,3 +23,15 @@ class WorldSquare:
 
     def get_pos(self):
         return self._pos
+
+    def get_see_from_here(self):
+        return self._see_from_here
+
+    def set_see_from_here(self, list):
+        self._see_from_here = list
+
+    def get_interact_from_here(self):
+        return self._interact_from_here
+
+    def set_interact_from_here(self, list):
+        self._interact_from_here = list
