@@ -1,12 +1,17 @@
+from typing import Set
+
+from entity import Entity
+
+
 class WorldSquare:
     def __init__(self, pos):
         self._pos = pos
-        self._entities = []
-        self._neighbors = []
-        self._see_from_here = []
-        self._interact_from_here = []
+        self._entities = set()
+        self._neighbors = set()
+        self._see_from_here = set()
+        self._interact_from_here = set()
 
-    def get_entities(self):
+    def get_entities(self) -> Set[Entity]:
         return self._entities
 
     def get_neighbors(self):
@@ -14,15 +19,6 @@ class WorldSquare:
 
     def set_neighbors(self, neighbors):
         self._neighbors = neighbors
-
-    def append(self, entity):
-        self._entities.append(entity)
-
-    def remove(self, entity):
-        self._entities.remove(entity)
-
-    def get_pos(self):
-        return self._pos
 
     def get_see_from_here(self):
         return self._see_from_here
@@ -35,3 +31,12 @@ class WorldSquare:
 
     def set_interact_from_here(self, list):
         self._interact_from_here = list
+
+    def append(self, entity):
+        self._entities.add(entity)
+
+    def remove(self, entity):
+        self._entities.remove(entity)
+
+    def get_pos(self):
+        return self._pos

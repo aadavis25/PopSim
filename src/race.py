@@ -1,5 +1,10 @@
+from typing import Tuple
+
+from src.obelysk import Obelysk
+
+
 class Race:
-    def __init__(self, name, color):
+    def __init__(self, name: str, color: Tuple[int, int, int]):
         self._name = name
         self._color = color
         self._obelysk = None
@@ -13,5 +18,5 @@ class Race:
     def get_obelysk(self):
         return self._obelysk
 
-    def set_obelysk(self, ob):
+    def set_obelysk(self, ob: Obelysk):
         self._obelysk = ob
