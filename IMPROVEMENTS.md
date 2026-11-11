@@ -1,6 +1,6 @@
 # PopSim: Improvements, Test Plan, and Gaps
 
-Review of the working tree (not HEAD: 11 files have uncommitted changes, including the `food_node.py` → `resource_node.py` rename).
+Review of the working tree at the time of the original review (not HEAD). Main-loop findings marked **Fixed** were addressed in the follow-up refactor; other findings remain open.
 
 **Evidence levels**
 - **Reproduced**: I ran a throwaway script against the code (in a temp directory so `cfg/path_map.json` was not touched).
@@ -49,12 +49,12 @@ Fix options:
 | R6 | `human.py:174-176` | Resource choice is "last one seen in set iteration order", not the nearest. It is non-deterministic across runs. |
 | R7 | `human.py:226`, `human.py:116-122` | `random.randint(...) is marry_chance` compares ints by identity. It works only because CPython caches small ints. `can_be_friends` is never called, so the personality/race rule for friendship does nothing; friendship is a bare coin flip. |
 | R9 | `human.py:162-163` | At zero energy, `set_target([self._house, 0])` is set even when `_house` is `None`. |
-| R10 | `main.py:62-89` | Iterates `the_world.get_entities()` on the main thread while the world thread's `tick()` calls `_entities.update(...)`. This can raise `RuntimeError: Set changed size during iteration`. There is no lock. |
-| R11 | `main.py:26-31, 91-96` | The world thread is non-daemon. If the render loop raises, nothing sets the stop event and the process hangs. An exception in the world thread is not logged or propagated. |
+| R10 | `main.py:62-89` | Iterates `the_world.get_entities()` on the main thread while the world thread's `tick()` calls `_entities.update(...)`. This can raise `RuntimeError: Set changed size during iteration`. There is no lock. **Fixed:** world ticks and render snapshots now share a lock. |
+| R11 | `main.py:26-31, 91-96` | The world thread is non-daemon. If the render loop raises, nothing sets the stop event and the process hangs. An exception in the world thread is not logged or propagated. **Fixed:** shutdown sets the stop event and joins the thread; worker exceptions are logged and re-raised. |
 | R12 | `world.py:101-109` | `do_tick`→`update` runs `remove` then `append` on every entity every tick, including static ones. For multi-tile entities only the origin square is touched, which works by accident. |
 | R13 | `world.py:204-220` | Only `FileNotFoundError` and `JSONDecodeError` are caught. A wrong-schema or out-of-range cache raises `KeyError`/`TypeError`/`IndexError` at startup. |
-| R14 | `const.py:22` | `ONE_MILLION = 1000000000` is one billion. The sleep is correct (seconds) but the name is wrong, and the `waiting:` print is in seconds, not ms. |
-| R15 | `main.py:45-61` | `TILE_SIZE = 100` with 90×90 tiles issues 8 100 `draw.rect` calls per frame, almost all off-screen on a 900 px window. `row` and `col` are swapped. Tile counts ignore `-w`/`-i`. `self.clock` is created but never ticked, so the loop is uncapped. |
+| R14 | `const.py:22` | `ONE_MILLION = 1000000000` is one billion. The sleep is correct (seconds) but the name is wrong, and the `waiting:` print is in seconds, not ms. **Fixed:** renamed the unit constant and removed the slack-time print; overruns are logged in milliseconds. |
+| R15 | `main.py:45-61` | `TILE_SIZE = 100` with 90×90 tiles issues 8 100 `draw.rect` calls per frame, almost all off-screen on a 900 px window. `row` and `col` are swapped. Tile counts ignore `-w`/`-i`. `self.clock` is created but never ticked, so the loop is uncapped. **Fixed:** renderer caches correctly bounded tiles for the configured dimensions, uses x/y positions consistently, and caps frames at 60 FPS. |
 | R16 | `entity.py`/`house.py` | `House._dim = const.house_dim` aliases a module-level list. Mutating one house's dim changes all. Use tuples. |
 | R17 | `human.py`, `world.py`, `main.py` | Exact `type(x) is …` checks appear 13 times across the three files. Subclasses silently fail every check. Prefer `isinstance`. |
 
@@ -75,7 +75,7 @@ Measured: 300×300 world, 200 humans, from-scratch build, 150 ticks.
 - Per tick, `look_around` builds two sets from about 330 squares for each human.
 - `walkabout` calls `list(self._entities)` on every call.
 - `remember`/`add_memory` scan a set linearly. Use `dict[entity, tick]`.
-- `world_loop` is silent when a tick overruns the 16.7 ms budget. It only prints when it has slack. Log overruns.
+- **Fixed:** `world_loop` waits for the remaining 1/60-second tick interval when early and warns only when a tick exceeds it.
 
 Optional (**ask first**, it changes the world representation):
 - Replace the 810k-square grid, the KDTree, and the JSON cache with a `dict[(x, y)] → set[Entity]`.
@@ -98,8 +98,8 @@ Optional (**ask first**, it changes the world representation):
 - **Constants**: mixed `snake_case` and `UPPER_CASE` in `const.py`. Typo "rezourses". `FOOD_NODES` now builds `ResourceNode`s.
 - **Types**: several annotations are wrong (`get_target_object() -> Entity` can be `None`; `set_target(List[Entity | int])` is a heterogeneous list). A target dataclass fixes both and B3.
 - **Getters/setters**: some fields are public (`House.resource`, `.built`, `.items`), others use `get_*`. Pick one. Prefer plain attributes, which is idiomatic Python.
-- **Rendering**: split `grid_loop` into draw and event handling. Pre-render the checkerboard to a cached `Surface`, call `clock.tick(60)`, and replace the `type(entity) is …` chain with a dict of `type → draw function` or a `draw()` method.
-- **CLI**: `-i` for height is surprising (`--height` is clearer). `args.w or default` turns `0` into the default; reject non-positive values.
+- **Rendering (fixed):** entity drawing moved into `GridRenderer`, which caches the checkerboard; `clock.tick(60)` caps frames, and entity dispatch uses `isinstance`.
+- **CLI (fixed):** `-i` was replaced by `--height`; width and population have long options, and all supplied values must be positive integers.
 
 ---
 
@@ -269,11 +269,11 @@ Optional (**ask first**, it changes the world representation):
 
 | ID | Case | Expected |
 |---|---|---|
-| G1 | CLI args | defaults used when absent; zero, negative, and non-integer values rejected |
-| G2 | `Game` smoke with `SDL_VIDEODRIVER=dummy`, small world | N frames render; a QUIT event stops the world thread; `join()` returns |
-| G3 | Exception in the world thread | surfaced (logged, and stops the game) |
-| G4 | Exception in the render loop | stop event set, process exits |
-| G5 | `world_loop` timing, with an injected clock | sleeps `tick_speed − elapsed` seconds; no sleep on overrun; overrun is logged |
+| G1 | CLI args | defaults used when absent; zero, negative, and non-integer values rejected. **Fixed.** |
+| G2 | `Game` smoke with `SDL_VIDEODRIVER=dummy`, small world | N frames render; a QUIT event stops the world thread; `join()` returns. **Fixed.** |
+| G3 | Exception in the world thread | surfaced (logged, and stops the game). **Fixed.** |
+| G4 | Exception in the render loop | stop event set, process exits. **Fixed.** |
+| G5 | `world_loop` timing, with an injected clock | waits for the remaining 1/60-second interval if early; no wait at the exact interval; warns only when over budget. **Fixed.** |
 
 **Simulation and property tests** (seeded; patch `max_call`, `max_energy`, `talking_to_max` small so every state is reached quickly)
 
