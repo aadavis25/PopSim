@@ -1,7 +1,12 @@
 PopSim
 ======
 
-a simple population simulator
+A fishtank-style population simulation about humans living and interacting in four tribes.
+
+Game philosophy
+--------------
+
+See [docs/game-philosophy.md](docs/game-philosophy.md) for the game’s design principles, tick and energy model, human decision loop, and current prototype behavior.
 
 Setup and run
 -------------
