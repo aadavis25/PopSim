@@ -14,8 +14,8 @@ max_interactions_per_tick = 1
 talking_to_max = 9
 
 # system
-tick_speed_ns = 33333333.33
-ONE_MILLION = 1000000000
+NANOSECONDS_PER_SECOND = 1_000_000_000
+tick_speed_ns = NANOSECONDS_PER_SECOND / 60
 
 # dim
 house_dim = [4, 4]
@@ -27,8 +27,6 @@ human_dim = [2, 2]
 TITLE = "Grid"
 WINDOW_WIDTH = 900
 WINDOW_HEIGHT = 900
-TILES_HORIZONTAL = int(WINDOW_WIDTH / 10)
-TILES_VERTICAL = int(WINDOW_HEIGHT / 10)
 TILE_SIZE = 100
 PEOPLE = 200
 FOOD_NODES = int(WINDOW_WIDTH / 100 * WINDOW_HEIGHT / 100)
