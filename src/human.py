@@ -2,9 +2,8 @@ import math
 import random
 from typing import List, Optional, Self
 
-from src.const import friend_chance, genders, human_dim, interaction_delay, marry_chance, marry_gender, max_call, \
-    max_energy, \
-    talking_to_max, want_to_see_ticks
+from src.const import friend_chance, genders, human_dim, interaction_delay, interact_dist, marry_chance, marry_gender, \
+    max_call, max_energy, see_dist, talking_to_max, want_to_see_ticks
 from src.entity import Entity
 from src.house import House
 from src.memory import Memory
@@ -106,11 +105,10 @@ class Human(Entity):
     def look_around(self):
         self._can_see = set()
         self._nearby = set()
-        node = self._world.get_at(self.get_pos())
 
-        for see_node in node.get_see_from_here():
+        for see_node in self._world.get_nodes_within(self.get_pos(), see_dist):
             self._can_see.update(see_node.get_entities())
-        for int_node in node.get_interact_from_here():
+        for int_node in self._world.get_nodes_within(self.get_pos(), interact_dist):
             self._nearby.update(int_node.get_entities())
 
     def do_something(self):

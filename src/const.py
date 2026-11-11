@@ -1,6 +1,3 @@
-import math
-from collections import deque
-
 # humans
 genders = ['M', 'F']
 personalities = ['A', 'a', 'B', 'b']
@@ -39,32 +36,3 @@ FOOD_NODES = int(WINDOW_WIDTH / 100 * WINDOW_HEIGHT / 100)
 
 def len_minus_one(arr):
     return len(arr) - 1
-
-
-def find_first_neighbor(start_node, func, args):
-    visited = set()
-    queue = deque()
-    visited.add(start_node)
-    queue.append(start_node)
-    while queue:
-        m = queue.popleft()
-        for neighbor in m.get_neighbors():
-            if neighbor not in visited:
-                if func(neighbor, args):
-                    return neighbor
-                visited.add(neighbor)
-                queue.append(neighbor)
-    return None
-
-
-def get_all_nodes_within(start_node, dist):
-    visited = set()
-    queue = deque()
-    queue.append(start_node)
-    while queue:
-        m = queue.popleft()
-        for neighbor in m.get_neighbors():
-            if math.dist(start_node.get_pos(), neighbor.get_pos()) <= dist and neighbor not in visited:
-                visited.add(neighbor)
-                queue.append(neighbor)
-    return visited

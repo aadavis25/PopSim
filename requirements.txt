@@ -1,2 +1,3 @@
-pygame
-scipy
+pygame; python_version < "3.14"
+pygame-ce>=2.5.8; python_version >= "3.14"
+pytest
