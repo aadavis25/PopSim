@@ -1,6 +1,6 @@
 # PopSim: Improvements, Test Plan, and Gaps
 
-Review of the working tree at the time of the original review (not HEAD). Main-loop findings marked **Fixed** were addressed in the follow-up refactor; other findings remain open.
+Review of the working tree at the time of the original review. Human findings and their test cases were checked against current source; other findings retain the original review status.
 
 **Evidence levels**
 - **Reproduced**: I ran a throwaway script against the code (in a temp directory so `cfg/path_map.json` was not touched).
@@ -17,11 +17,11 @@ Findings are ordered by severity. Fixes are the smallest ones I can see. Anythin
 
 | # | Where | Problem | Fix |
 |---|---|---|---|
-| B1 | `human.py:247-250` `stop_talking` | `if self._talking_to:` is always true because `_talking_to` is a non-empty tuple `(None, 0)`. With no partner it calls `None.clear_talking_to()` and raises `AttributeError`. It runs from `nap()` and, every tick once `_the_call` reaches 0 (45 000 ticks ≈ 12.5 min at 60 Hz), from `find_target`. The exception kills the world thread (see B12), so the window keeps drawing a frozen world. | `partner = self.get_talking_target()`; `if partner: partner.clear_talking_to()`; `self.clear_talking_to()`. |
-| B2 | `human.py:73-74, 199-206` | `interact()` returns early while `_napping`, but `nap()` is only called from `interact()`. After the first nap, energy is 5, decays to 0, and the human stays napping forever (`is_busy()` stays true). Reproduced: after 2000 ticks, `napping=True`, `energy=0`. In a full run B1 usually fires first, unless the human happens to be talking. | Move wake-up logic into `tick`/`decrement`: while napping, add energy and clear `_napping` at `>= max_energy`. Use `>=`, not `==`. |
-| B3 | `human.py:38, 265-266, 146` | `_target` is sometimes a tuple (`__init__`, `clear_target`) and sometimes a list (`set_target` callers). `move()` does `self._target[1] += 1`, which raises `TypeError` on a tuple. This is reached whenever a Human is built while its race already has an obelysk, i.e. the second `World` in a process (B5). Same tuple/list mix exists for `_talking_to`. | Store `_target` and `_target_age` as separate fields. |
-| B4 | `human.py:79-86`, `world.py:162` | `_nearby` includes the human itself (its own square is in `interact_from_here`) and `get_random_entity()` can return the human. `interact()` then calls `stop_and_talk(self)`. Reproduced: `_talking_to[0] is self`. The human talks to itself, runs `add_known(self)`, and wastes 9 ticks. | `self._nearby.discard(self)` in `look_around`. Exclude `self` in `walkabout`. |
-| B5 | `world.py:44-49, 18-19` | `_world_dim`, `_entities`, and `_entities_to_add` are class attributes, and `__init__` mutates them in place. `races` is a module global holding obelysk state. A second `World` inherits the first's entities and obelysks. Reproduced: two 5-human worlds gave 10 entities in the second, and `w1._entities is w2._entities` was `True`. This is the main obstacle to isolated tests. | Move to `__init__`. Build `races` inside `World.__init__` or via a `make_races()` helper. |
+| B1 | `Human.stop_talking` | Calling `stop_talking()` without a partner previously dereferenced `None`. | **Fixed:** checks `talking_to[0]` before clearing the partner; the at-home recovery test exercises this path. |
+| B2 | `Human.nap`, `Human.do_something` | Napping could stall because energy drained while napping and no code continued the recovery. | **Fixed:** depleted humans nap at home, recover by 5 energy per tick, and wake at `max_energy`; the full recovery test covers this path. |
+| B3 | `Human._target`, `Human.talking_to` | Targets and conversation state previously mixed tuple and list forms. | **Fixed:** both are consistently initialized and assigned as lists. |
+| B4 | `Human.look_around`, `Human.interact`, `Human.walkabout` | **Fixed:** visibility sets exclude `self`; nearby interaction rejects self; wandering excludes self from random candidates. |
+| B5 | `World` state used by Humans | **Partially fixed:** `_entities_to_add` is per-instance, but `_world_dim`, `_entities`, and module-level race/obelisk state remain shared. Move mutable world and race state to each `World` instance. |
 | B6 | `world.py:111-119` `put_house` | `randint` upper bound is `_world_dim` (one past the last index), and a 4×4 house also overhangs the edge. Reproduced: `IndexError` in 355/2000 calls on a 40×40 world. At 900×900 the chance per call is lower but non-zero [inferred]. | Clamp the range to `[0, dim - house_dim - 1]`. |
 | B7 | `world.py:134-142` `nothing_here` | Returns `True` (free) when the footprint is out of bounds, because the check is skipped. `valid_pos(x + dim, y + dim)` treats the exclusive end as an inclusive index, so an entity that exactly fits against the far edge is never collision-checked. Reproduced: a House at `[38,38]` on 40×40 over a ResourceNode returned `True`. `put_entity` then raises `IndexError` while registering squares. | Check the last occupied cell `(x + dim - 1, y + dim - 1)`. Return `False` when out of bounds. |
 | B8 | `world.py:22-40` `encode_poss`/`decode_poss` | Encodes only min and max x per row, so rows with gaps are not preserved. `neighbors` of `(x, y)` contains `x-1` and `x+1` but not `x`, so decoding adds the node itself. Reproduced: `[[1,1],[3,1],[2,2]]` came back with an extra `[2,1]`. Neighbors from the cache therefore differ from a fresh build. | Store the `neighbors` row as the explicit list. Keep range encoding for `see` and `interact`, which are convex discs. |
@@ -41,14 +41,14 @@ Fix options:
 
 | # | Where | Problem |
 |---|---|---|
-| R1 | `human.py:79-80, 88-89` | When the target is in `_nearby`, `want_to_interact`/`is_busy` are bypassed. `stop_and_talk` can overwrite a napping, calling, or already-talking partner and leave a third party with a dangling `_talking_to`. |
-| R2 | `human.py:118-123, 125-131` | `get_married` checks only `self._spouse`, not `other`'s. A married `other` gets a new spouse and house, and the old spouse still points at them. |
-| R3 | `human.py:125-131, 170-171` | Marriage creates a second house. The first one (from `put_house` in `find_target`) stays in the world forever; there is no `remove_entity`. `House._owner` is never read. |
-| R4 | `human.py:93-96` | Resource pickup is unconditional: it happens even with no house, or when the house is built. Nodes are never depleted. `print("getting resource")` printed about 190 times in 150 ticks with 200 humans. |
-| R5 | `human.py:103` | `== HOUSE_BUILT_RESOURCE` breaks if the carry amount or target changes. Use `>=`. |
-| R6 | `human.py:174-176` | Resource choice is "last one seen in set iteration order", not the nearest. It is non-deterministic across runs. |
-| R7 | `human.py:226`, `human.py:116-122` | `random.randint(...) is marry_chance` compares ints by identity. It works only because CPython caches small ints. `can_be_friends` is never called, so the personality/race rule for friendship does nothing; friendship is a bare coin flip. |
-| R9 | `human.py:162-163` | At zero energy, `set_target([self._house, 0])` is set even when `_house` is `None`. |
+| R1 | `Human.interact` | Busy humans could be targeted for conversation. **Fixed:** interaction rejects talking, napping, and call-expired targets without changing their state. |
+| R2 | `Human.get_married`, `Human.interact` | Previously only the initiating human's spouse was checked. **Fixed:** marriage now requires both humans to be unmarried. |
+| R3 | `Human.get_married`, `Human.build_house` | `get_married()` only sets spouse links; `build_house()` has no callers. Marriage currently creates no shared house, and repeated direct calls could create orphans. **Open:** connect marriage to one-time shared-house creation and test world registration. |
+| R4 | Human resource behavior | No resource pickup/deposit logic currently exists in `Human`; the previously reported unconditional pickup is not present. **Deferred** until resource-driven construction is implemented. |
+| R5 | Human resource behavior | No carry/build threshold logic currently exists in `Human`. **Deferred** until resource-driven construction is implemented. |
+| R6 | Human resource behavior | No resource-target selection currently exists in `Human`. **Deferred** until that activity is implemented. |
+| R7 | `Human.can_be_friends`, `Human.interact` | Friendship eligibility was bypassed, and its chance check used `is`. **Fixed:** conversation completion calls `can_be_friends()` and its integer comparison uses `==`. |
+| R9 | `Human.do_something` | At zero energy, a human without a house could previously receive a `None` target. **Fixed:** exhausted humans target their home, or their own obelisk when houseless. |
 | R10 | `main.py:62-89` | Iterates `the_world.get_entities()` on the main thread while the world thread's `tick()` calls `_entities.update(...)`. This can raise `RuntimeError: Set changed size during iteration`. There is no lock. **Fixed:** world ticks and render snapshots now share a lock. |
 | R11 | `main.py:26-31, 91-96` | The world thread is non-daemon. If the render loop raises, nothing sets the stop event and the process hangs. An exception in the world thread is not logged or propagated. **Fixed:** shutdown sets the stop event and joins the thread; worker exceptions are logged and re-raised. |
 | R12 | `world.py:101-109` | `do_tick`→`update` runs `remove` then `append` on every entity every tick, including static ones. For multi-tile entities only the origin square is touched, which works by accident. |
@@ -72,31 +72,29 @@ Measured: 300×300 world, 200 humans, from-scratch build, 150 ticks.
 | Cache file | 45 MB |
 
 - Memory and build time scale with W×H: 900×900 is 9× the squares. Linear extrapolation gives about 5.6 GB and about 90 s [inferred]. Every `WorldSquare` stores three collections (about 8 neighbors, about 13 interact squares, about 317 see squares).
-- Per tick, `look_around` builds two sets from about 330 squares for each human.
-- `walkabout` calls `list(self._entities)` on every call.
-- `remember`/`add_memory` scan a set linearly. Use `dict[entity, tick]`.
+- **Fixed:** `look_around()` reuses its visibility/nearby sets; `World.get_random_entity()` caches choices instead of copying the entity set per wander, and wandering excludes self.
+- **Fixed:** Human memories use entity-keyed lookup instead of scanning a set; duplicate memory updates preserve the existing `Memory` object.
 - **Fixed:** `world_loop` waits for the remaining 1/60-second tick interval when early and warns only when a tick exceeds it.
 
 Optional (**ask first**, it changes the world representation):
-- Replace the 810k-square grid, the KDTree, and the JSON cache with a `dict[(x, y)] → set[Entity]`.
-- Precompute the offset lists once (about 317 `(dx, dy)` pairs for see, about 13 for interact).
-- This removes `cfg/path_map.json` and `scipy`, and fixes B8/B9 and the startup cost.
-- It also makes `World` trivially constructible in tests.
+- Current grid storage is still a dense two-dimensional list; replacing it with `dict[(x, y)] → set[Entity]` remains an optional redesign if profiling justifies it.
+- **Fixed:** `World.get_nodes_within()` lazily caches the offset list for each queried distance.
+- The former KDTree, path-map, and JSON-cache designs are absent from current source; only the dense-grid representation remains under consideration.
 
 ---
 
 ## 3. Structure and maintainability
 
 - **Make `World` testable**: accept `path_map` (or `None`) and an `rng: random.Random` rather than calling module-level `random`. Seedable runs also allow determinism tests and a `--seed` flag.
-- **Replace `print`** in `human.py` (`"napping"`, `"getting resource"`) and `main.py` with `logging`, off by default.
+- **Fixed:** neither `human.py` nor `main.py` prints progress messages.
 - **Remove dead code** (each name has no callers except its own definition):
   - `len_minus_one`, `get_all_nodes_within` (`const.py`)
   - `get_max_dim`, `get_world_dim` (`world.py`)
-  - `Entity.set_nearby`, `Human.set_can_see`, `get_energy`, `can_be_friends`, `summon`
+  - `Entity.set_nearby`, `Human.set_can_see`
   - unused constants `max_interactions_per_tick`, `max_hunger`
   - commented blocks in `human.py` (timing, hunger, friend-summon) and `world.py:64, 103-104`
 - **Constants**: mixed `snake_case` and `UPPER_CASE` in `const.py`. Typo "rezourses". `FOOD_NODES` now builds `ResourceNode`s.
-- **Types**: several annotations are wrong (`get_target_object() -> Entity` can be `None`; `set_target(List[Entity | int])` is a heterogeneous list). A target dataclass fixes both and B3.
+- **Types:** the tuple/list mismatch from B3 is fixed, but `set_target(List[Entity | int])` still models a heterogeneous target and could use a target type.
 - **Getters/setters**: some fields are public (`House.resource`, `.built`, `.items`), others use `get_*`. Pick one. Prefer plain attributes, which is idiomatic Python.
 - **Rendering (fixed):** entity drawing moved into `GridRenderer`, which caches the checkerboard; `clock.tick(60)` caps frames, and entity dispatch uses `isinstance`.
 - **CLI (fixed):** `-i` was replaced by `--height`; width and population have long options, and all supplied values must be positive integers.
@@ -118,12 +116,7 @@ Optional (**ask first**, it changes the world representation):
 
 ### 5.1 Current state
 
-`test/human.py` cannot run, and should be replaced:
-- `from world import World` is the wrong import (`src.world`).
-- `class TestFindTarget(HumanTest)` is nested inside `HumanTest`'s body, so it raises `NameError` at import.
-- Its only assertion is `assertEqual(True, False)`.
-- `World(10, 10, 0)` at class level runs at import and **overwrites `cfg/path_map.json`** (B9).
-- The directory `test/` shadows the stdlib `test` package, and `human.py` does not match unittest discovery (`test*.py`).
+`test/human.py` is obsolete. **Fixed:** Human tests now live in `tests/test_human.py`, use `src.*` imports, and do not construct a `World` at import time.
 
 ### 5.2 Infrastructure
 
@@ -209,53 +202,53 @@ Optional (**ask first**, it changes the world representation):
 | M1 | Target at same pos | no movement |
 | M2 | Pure horizontal / vertical / diagonal | one step along that axis (or both) |
 | M3 | Shallow ratio (`dx > 2·dy`) and steep ratio | only the dominant axis moves |
-| M4 | Repeated `move_toward` | reaches the target in `max(\|dx\|,\|dy\|)` ticks and stays |
-| M5 | Many steps from random positions | never leaves the world |
-| M6 | `move()` with the initial tuple target | does not raise. **(currently fails, B3)** |
+| M4 | Repeated `move_toward` | Reaches the target in `max(|dx|, |dy|)` movement steps; at the default cadence that takes two ticks per step. |
+| M5 | Many steps from random positions | Never leaves the world. |
+| M6 | Target initialized through `clear_target()` | Movement accepts the initial target without a tuple/list `TypeError`. **Fixed (B3).** |
 
 **Talking and relationships**
 
 | ID | Case | Expected |
 |---|---|---|
-| K1 | `stop_and_talk` | both humans point at each other with `talking_to_max` |
-| K2 | `stop_talking` with no partner | no-op. **(currently fails, B1)** |
-| K3 | `stop_talking` with a partner | clears both sides |
-| K4 | A human never selects itself (nearby or `walkabout`) | **(currently fails, B4)** |
-| K5 | Explicitly targeting a napping, calling, or talking human | that human's state is not overwritten. **(currently fails, R1)** |
-| K6 | Talk ends after exactly `talking_to_max` ticks | memory recorded; `add_known` is symmetric |
-| K7 | Friendship (patch `random` to hit and miss) | `add_friend` only on a hit |
-| K8 | Marriage requires: friends, same personality, same race, different genders, `self` is `marry_gender`, **both** unmarried, roll hit | each condition removed in turn prevents marriage |
-| K9 | Already-married `other` | not re-married. **(currently fails, R2)** |
-| K10 | Marriage | spouses symmetric; both reference the same house; house is in the world; the previous houses are not left orphaned (R3) |
-| K11 | `want_to_interact` boundary | `interaction_delay` ticks ago rejected, `+1` accepted; busy `other` rejected |
-| K12 | `add_memory` twice | one memory, time updated |
-| K13 | `remember` an unknown entity | `None` |
+| K1 | `stop_and_talk` | Both humans point at each other with `talking_to_max`. **Fixed:** the method assigns both links. |
+| K2 | `stop_talking` with no partner | No-op. **Fixed (B1):** the no-partner case is guarded. |
+| K3 | `stop_talking` with a partner | Clears both sides. **Fixed:** the method clears the partner and local link. |
+| K4 | A human never selects itself (nearby or `walkabout`) | **Fixed (B4).** |
+| K5 | Explicitly targeting a napping, calling, or talking human | that human's state is not overwritten. **Fixed (R1).** |
+| K6 | Conversation timing | Memory is recorded after the countdown; verify the intended `talking_to_max` boundary and symmetric acquaintance update. **Needs verification.** |
+| K7 | Friendship eligibility | `add_friend` runs only when `can_be_friends()` returns true. **Fixed (R7).** |
+| K8 | Marriage requires: friends, same personality, same race, different genders, `self` is `marry_gender`, **both** unmarried, roll hit | implementation checks these eligibility rules; full condition-matrix regression coverage remains open. |
+| K9 | Already-married `other` | not re-married. **Fixed (R2).** |
+| K10 | Marriage | spouses symmetric; both reference the same house; house is in the world; the previous houses are not left orphaned. **Open (R3; house-building deferred).** |
+| K11 | `want_to_talk` boundary | `interaction_delay` ticks ago is rejected and `+1` accepted; interaction rejects talking, napping, and call-expired targets. **Busy-target behavior fixed (R1); delay-boundary test remains unverified.** |
+| K12 | `add_memory` twice | one memory, time updated. **Fixed:** tested. |
+| K13 | `remember` an unknown entity | `None`. **Fixed:** tested. |
 
 **Energy, napping, call**
 
 | ID | Case | Expected |
 |---|---|---|
-| N1 | Energy | decrements 1/tick and saturates at 0 |
-| N2 | At 0 energy | targets the house (or defined behaviour with no house) |
-| N3 | Nap | energy rises and the human wakes at `max_energy`. **(currently fails, B2)** |
-| N4 | After waking | `is_busy()` is false and normal behaviour resumes. **(currently fails, B2)** |
-| N5 | Energy never exceeds `max_energy` | true |
-| C1 | `_the_call` | decrements, and `calling()` flips at 0 |
-| C2 | At call 0 | stops talking without error and targets own obelysk. **(currently fails, B1)** |
-| C3 | Touching own obelysk | resets `_the_call`; another race's obelysk does not |
+| N1 | Energy | Movement and idle ticks do not drain energy; an active conversation tick costs 1. **Fixed:** covered by Human behavior tests. |
+| N2 | At 0 energy | Targets the home, or the human's own obelisk if houseless. **Fixed:** covered by Human behavior tests. |
+| N3 | Nap | Energy rises and the human wakes at `max_energy`. **Fixed:** full home-rest recovery is tested. |
+| N4 | After waking | `get_napping()` is false and normal goal selection resumes. **Fixed:** full home-rest recovery is tested. |
+| N5 | Energy cap | Energy never exceeds `max_energy`, including when recovery overshoots. **Fixed:** `nap()` clamps the increase and wakes at the cap. |
+| C1 | `_the_call` | Decrements, and `calling()` flips at 0. **Implemented:** `tick()` decrements the counter and `calling()` checks for zero. |
+| C2 | At call 0 during a conversation | A call-expired human should stop talking and target its own obelisk. **Partially fixed:** `stop_talking()` is safe, but `do_something()` returns while talking and does not interrupt the conversation. |
+| C3 | Touching an obelisk | Own obelisk resets `_the_call`; another race's does not. **Implemented:** `interact()` checks obelisk identity. |
 
 **Houses and resources**
 
 | ID | Case | Expected |
 |---|---|---|
-| H1 | Houseless human | gets a house on its first `find_target` |
-| H2 | Pickup | `RESOURCE_MAX_CARRY` only when empty-handed |
-| H3 | Pickup when house is built or absent | no pickup. **(currently fails, R4)** |
-| H4 | Deposit | house resource increases; carry resets to 0 |
-| H5 | `HOUSE_BUILT_RESOURCE / RESOURCE_MAX_CARRY` deposits | `built` is true |
-| H6 | Overshoot (carry not a divisor of the goal) | still built (R5) |
-| H7 | Several resource nodes visible | nearest chosen. **(currently fails, R6)** |
-| H8 | Target not reached after 300 ticks | cleared, unless obelysk or house |
+| H1 | Marriage and house-building | Marriage should create one shared house at the tribe obelisk. **Open (R3):** `build_house()` has no caller. |
+| H2 | Resource pickup | No resource pickup activity is implemented; defer this case until resource activities exist. |
+| H3 | Pickup when house is built or absent | No resource pickup activity is implemented; defer this case until resource activities exist. |
+| H4 | Deposit | No resource deposit activity is implemented; defer this case until resource activities exist. |
+| H5 | `HOUSE_BUILT_RESOURCE / RESOURCE_MAX_CARRY` deposits | No resource construction activity is implemented; defer this case until resource activities exist. |
+| H6 | Carry overshoot | No resource construction activity is implemented; defer this case until resource activities exist. |
+| H7 | Several resource nodes visible | No resource target selection is implemented; defer this case until that activity exists. |
+| H8 | Target not reached after `max_target_ticks` | Cleared, unless obelisk or house. **Implemented:** `do_something()` applies the configured timeout. |
 
 **Entities and constants**
 
@@ -291,10 +284,10 @@ Optional (**ask first**, it changes the world representation):
 
 ## 6. Suggested order
 
-1. Fix B1, B3, B4 (about 10 lines in `human.py`). These stop the crashes and the self-talk.
-2. Fix B5 (class state → instance state) and make `World` take `path_map`/`rng`. This unblocks isolated tests.
-3. Replace `test/human.py` with `tests/`; add the tests marked **(currently fails)** first, then fix B2, B6, B7, B8, B9.
-4. Fix B9 immediately if you run anything: add `cfg/` to `.gitignore` and stop the default run overwriting the cache.
-5. Threading and shutdown (R10, R11). Rendering (R15).
-6. Decide on the grid/cache removal (§2). This is the largest win and the largest change.
-7. README, pinned requirements, dead-code removal, logging.
+1. Finish conversation/call behavior (C2), then verify conversation timing and the marriage eligibility matrix (K6/K8).
+2. Move mutable `World` state to each instance (B5), then reassess remaining world findings against the current grid implementation.
+3. Keep regression tests in `tests/`; add focused coverage for each remaining behavior before fixing it.
+4. Reassess historical World/cache findings against current source before treating them as active work.
+5. Keep threading and shutdown (R10, R11), rendering (R15), and tick timing marked fixed unless a regression appears.
+6. Consider a grid representation change only after profiling; the old KDTree/path-map/JSON-cache proposal is obsolete.
+7. Update remaining README, requirements, and dead-code findings only if they still apply to the current tree.

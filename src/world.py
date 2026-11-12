@@ -34,6 +34,7 @@ class World:
             for y in range(self._world_dim[1])
         ]
         self._time = 0
+        self._random_entity_choices = None
         self._is_ticking = False
         self._entities_to_add = set()
 
@@ -118,7 +119,9 @@ class World:
         if self._is_ticking:
             self._entities_to_add.add(entity)
             return
-        self._entities.add(entity)
+        if entity not in self._entities:
+            self._entities.add(entity)
+            self._random_entity_choices = None
         pos = entity.get_pos()
         if not self.nothing_here(entity, entity.get_dim()):
             pos = self.find_first_neighbor(
@@ -164,8 +167,19 @@ class World:
     def get_at(self, pos) -> WorldSquare:
         return self._world[get_y(pos)][get_x(pos)]
 
-    def get_random_entity(self):
-        return random.choice(list(self._entities))
+    def get_random_entity(self, exclude=None):
+        choices = getattr(self, "_random_entity_choices", None)
+        if choices is None or len(choices) != len(self._entities):
+            choices = tuple(self._entities)
+            self._random_entity_choices = choices
+        if exclude is None:
+            return random.choice(choices)
+        if len(choices) == 1 and choices[0] is exclude:
+            return None
+        entity = random.choice(choices)
+        while entity is exclude:
+            entity = random.choice(choices)
+        return entity
 
     def get_nodes_within(self, pos, dist) -> Iterator[WorldSquare]:
         offsets = self._nodes_within_offsets.get(dist)

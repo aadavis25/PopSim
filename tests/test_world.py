@@ -318,3 +318,43 @@ def test_entity_added_during_tick_is_placed_between_ticks_and_ticks_next():
     world.tick()
 
     assert added_entity.tick_count == 1
+
+
+def test_random_entity_excludes_requested_entity():
+    world = make_world()
+    excluded = MovingEntity([1, 1])
+    other = MovingEntity([2, 2])
+    world.get_entities().update({excluded, other})
+
+    assert world.get_random_entity(exclude=excluded) is other
+
+
+def test_random_entity_returns_none_when_only_excluded_entity_exists():
+    world = make_world()
+    excluded = MovingEntity([1, 1])
+    world.get_entities().add(excluded)
+
+    assert world.get_random_entity(exclude=excluded) is None
+
+
+def test_random_entity_cache_includes_entities_added_later():
+    world = make_world()
+    first = MovingEntity([1, 1])
+    world.put_entity(first)
+    assert world.get_random_entity() is first
+
+    later = MovingEntity([3, 3])
+    world.put_entity(later)
+
+    assert world.get_random_entity(exclude=first) is later
+
+
+def test_human_walkabout_does_not_select_itself():
+    world = make_world()
+    human = world_module.Human(world, [1, 1], "A", Race("Blue", (0, 0, 255)))
+    other = MovingEntity([3, 3])
+    world.get_entities().update({human, other})
+
+    human.walkabout()
+
+    assert human.get_target()[0] is other

@@ -3,7 +3,6 @@ import random
 from typing import List, Optional, Self
 
 from src.const import (
-    friend_chance,
     genders,
     human_dim,
     interaction_delay,
@@ -39,7 +38,7 @@ class Human(Entity):
         self._napping = False
         self._house = None
         self.clear_target()
-        self._memories = set()
+        self._memories = {}
         self._the_call = max_call
         self._inventory = []
         self.talking_to = [None, 0]
@@ -72,9 +71,9 @@ class Human(Entity):
                     self.stop_talking()
                     self.add_memory(other)
                     self.add_known(other)
-                    if random.randint(1, friend_chance) == friend_chance:
+                    if self.can_be_friends(other):
                         self.add_friend(other)
-                    if not self._spouse:
+                    if not self._spouse and not other._spouse:
                         if (
                             other in self._friends
                             and self.can_be_spouse(other)
@@ -89,6 +88,9 @@ class Human(Entity):
                 other = random.choice(list(self._nearby))
             if (
                 type(other) is Human
+                and other is not self
+                and not other.get_napping()
+                and not other.calling()
                 and not other.talking_to[0]
                 and self.want_to_talk(other)
             ):
@@ -104,6 +106,8 @@ class Human(Entity):
         self._target = [None, 0]
 
     def get_married(self, other: Self):
+        if self._spouse or other._spouse:
+            return
         other.set_spouse(self)
         self.set_spouse(other)
 
@@ -115,14 +119,16 @@ class Human(Entity):
         self._world.put_entity(house)
 
     def look_around(self):
-        self._can_see = set()
-        self._nearby = set()
+        self._can_see.clear()
+        self._nearby.clear()
         pos = self.get_pos()
 
         for see_node in self._world.get_nodes_within(pos, see_dist):
             self._can_see.update(see_node.get_entities())
+        self._can_see.discard(self)
         for nearby_node in self._world.get_nodes_within(pos, interact_dist):
             self._nearby.update(nearby_node.get_entities())
+        self._nearby.discard(self)
 
     def do_something(self):
         if self._energy <= 0:
@@ -193,22 +199,19 @@ class Human(Entity):
         self.stop_talking()
         self.clear_target()
         self._napping = True
-        self._energy += 5
-        if self._energy == max_energy:
+        self._energy = min(max_energy, self._energy + 5)
+        if self._energy >= max_energy:
             self._napping = False
 
     def add_memory(self, o: Entity):
-        for mem in self._memories:
-            if mem.get_entity() is o:
-                mem.set_time(self._world.get_time())
-                return
-        self._memories.add(Memory(o, self._world.get_time()))
+        memory = self._memories.get(o)
+        if memory:
+            memory.set_time(self._world.get_time())
+            return
+        self._memories[o] = Memory(o, self._world.get_time())
 
     def remember(self, o: Entity) -> Optional[Memory]:
-        for mem in self._memories:
-            if mem.get_entity() is o:
-                return mem
-        return None
+        return self._memories.get(o)
 
     def set_can_see(self, array):
         self._can_see = array
@@ -216,7 +219,7 @@ class Human(Entity):
     def can_be_friends(self, other: Self) -> bool:
         return (self.get_personality().lower() == other.get_personality().lower()) and (
             self.get_race() is other.get_race()
-            or random.randint(1, marry_chance) is marry_chance
+            or random.randint(1, marry_chance) == marry_chance
         )
 
     def can_be_spouse(self, other: Self) -> bool:
@@ -287,7 +290,7 @@ class Human(Entity):
         return self.get_race().get_obelysk()
 
     def walkabout(self):
-        self._target = [self._world.get_random_entity(), 0]
+        self._target = [self._world.get_random_entity(exclude=self), 0]
 
     def calling(self):
         return not self._the_call

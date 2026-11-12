@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
+
+from src.const import marry_chance, max_energy, marry_gender
 from src.entity import Entity
 from src.human import Human
 from src.memory import Memory
@@ -22,7 +25,7 @@ def test_do_something_retargets_friend_from_old_memory(monkeypatch):
     human._the_call = 1
     human._can_see = set()
     human._friends = {friend}
-    human._memories = {Memory(friend, 0)}
+    human._memories = {friend: Memory(friend, 0)}
     human._world = FakeWorld()
     human._pos = [0, 0]
     human.talking_to = [None, 0]
@@ -150,3 +153,155 @@ def test_exhausted_human_at_home_restores_energy(monkeypatch):
 
     assert human.get_energy() == 5
     assert human.get_napping()
+
+
+def test_home_rest_recovers_and_wakes_at_max_energy(monkeypatch):
+    human = make_moving_human(monkeypatch)
+    human._house = Entity([0, 0])
+    human._energy = 0
+    human._target = [None, 0]
+    monkeypatch.setattr(human, "am_at_house", lambda: True)
+
+    for _ in range(max_energy // 5):
+        human.tick()
+
+    assert human.get_energy() == max_energy
+    assert not human.get_napping()
+
+
+@pytest.mark.parametrize("busy_state", ["napping", "calling", "talking"])
+def test_interact_does_not_start_conversation_with_busy_human(busy_state):
+    race = Race("Blue", (0, 0, 255))
+    human = Human(FakeWorld(), [0, 0], "A", race)
+    target = Human(FakeWorld(), [1, 0], "A", race)
+    old_target = [Entity([8, 8]), 12]
+    target.set_target(old_target)
+    if busy_state == "napping":
+        target._napping = True
+    elif busy_state == "calling":
+        target._the_call = 0
+    else:
+        target.talking_to = [SimpleNamespace(), 5]
+
+    human._nearby = {target}
+    human.set_target([target, 0])
+
+    human.interact()
+
+    assert human.talking_to == [None, 0]
+    assert target.get_target() is old_target
+    assert target.get_napping() is (busy_state == "napping")
+    if busy_state == "talking":
+        assert target.talking_to[0] is not None
+    else:
+        assert target.talking_to == [None, 0]
+
+
+def test_interact_uses_can_be_friends_when_ending_conversation(monkeypatch):
+    race = Race("Blue", (0, 0, 255))
+    human = Human(FakeWorld(), [0, 0], "A", race)
+    other = Human(FakeWorld(), [1, 0], "A", race)
+    human._gender = "F"
+    human.talking_to = [other, 0]
+    other.talking_to = [human, 0]
+    human._nearby = {other}
+    calls = []
+    monkeypatch.setattr(
+        human, "can_be_friends", lambda candidate: calls.append(candidate) or True
+    )
+
+    human.interact()
+
+    assert calls == [other]
+    assert other in human._friends
+
+
+def test_can_be_friends_uses_value_equality_for_chance(monkeypatch):
+    class Chance(int):
+        pass
+
+    human = Human(FakeWorld(), [0, 0], "A", Race("Blue", (0, 0, 255)))
+    other = Human(FakeWorld(), [1, 0], "a", Race("Red", (255, 0, 0)))
+    monkeypatch.setattr(
+        "src.human.random.randint", lambda *_: Chance(marry_chance)
+    )
+
+    assert human.can_be_friends(other)
+
+
+def test_interact_does_not_marry_an_already_married_target(monkeypatch):
+    race = Race("Blue", (0, 0, 255))
+    human = Human(FakeWorld(), [0, 0], "A", race)
+    other = Human(FakeWorld(), [1, 0], "A", race)
+    other_spouse = Human(FakeWorld(), [2, 0], "B", race)
+    human._gender = marry_gender
+    other._gender = "F" if marry_gender == "M" else "M"
+    human._friends.add(other)
+    other._spouse = other_spouse
+    human.talking_to = [other, 0]
+    other.talking_to = [human, 0]
+    human._nearby = {other}
+    monkeypatch.setattr("src.human.random.randint", lambda *_: 20)
+
+    human.interact()
+
+    assert human._spouse is None
+    assert other._spouse is other_spouse
+
+
+def test_get_married_does_not_replace_an_existing_spouse():
+    race = Race("Blue", (0, 0, 255))
+    human = Human(FakeWorld(), [0, 0], "A", race)
+    other = Human(FakeWorld(), [1, 0], "A", race)
+    other_spouse = Human(FakeWorld(), [2, 0], "B", race)
+    other._spouse = other_spouse
+
+    human.get_married(other)
+
+    assert human._spouse is None
+    assert other._spouse is other_spouse
+
+
+def test_nap_clamps_energy_and_wakes_when_recovery_overshoots():
+    human = Human(FakeWorld(), [0, 0], "A", Race("Blue", (0, 0, 255)))
+    human._energy = max_energy - 3
+    human._napping = True
+
+    human.nap()
+
+    assert human.get_energy() == max_energy
+    assert not human.get_napping()
+
+
+def test_look_around_excludes_self_from_visible_and_nearby():
+    human = Human(None, [0, 0], "A", Race("Blue", (0, 0, 255)))
+    other = Entity([1, 0])
+    square = SimpleNamespace(get_entities=lambda: {human, other})
+    human._world = SimpleNamespace(get_nodes_within=lambda *_: [square])
+
+    human.look_around()
+
+    assert human not in human._can_see
+    assert human not in human._nearby
+    assert other in human._can_see
+    assert other in human._nearby
+
+
+def test_add_memory_updates_existing_memory_without_duplicates():
+    time = [10]
+    human = Human(
+        SimpleNamespace(get_time=lambda: time[0]),
+        [0, 0],
+        "A",
+        Race("Blue", (0, 0, 255)),
+    )
+    entity = Entity([1, 1])
+
+    human.add_memory(entity)
+    memory = human.remember(entity)
+    time[0] = 20
+    human.add_memory(entity)
+
+    assert human.remember(entity) is memory
+    assert memory.get_time() == 20
+    assert human.remember(Entity([1, 1])) is None
