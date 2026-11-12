@@ -10,9 +10,9 @@ PopSim is a Python population simulator with a Pygame grid display. The applicat
 
 ## Setup and running
 
-- Dependencies are listed in `requirements.txt`: pygame below Python 3.14, or the pygame-ce drop-in package on Python 3.14+.
-- `setup.sh` creates a local `venv` and installs dependencies on Unix-like systems and Git Bash on Windows.
-- Launch with the virtual environment interpreter: `./venv/bin/python main.py` on Unix or `./venv/Scripts/python.exe main.py` in Windows Git Bash. Optional arguments: `-w`/`--width`, `--height`, and `-p`/`--population`, all positive integers.
+- Runtime and development dependencies are declared in `pyproject.toml` and pinned in `uv.lock`.
+- Install `uv` and `just`; `just setup` (or `./setup.sh`) installs the locked environment. Launch with `just run` or `uv run --locked main.py`. Optional arguments: `-w`/`--width`, `--height`, and `-p`/`--population`, all positive integers.
+- Run tests with `just test` or `uv run --locked pytest`; `just check` also runs Ruff.
 
 ## Code conventions
 

@@ -30,6 +30,8 @@ class GridRenderer:
             elif isinstance(entity, House):
                 pg.draw.rect(surface, (139, 69, 19), (*pos, *entity.get_dim()))
             elif isinstance(entity, Obelysk):
-                pg.draw.rect(surface, entity.get_race().get_color(), (*pos, *entity.get_dim()))
+                pg.draw.rect(
+                    surface, entity.get_race().get_color(), (*pos, *entity.get_dim())
+                )
             elif isinstance(entity, FoodNode):
                 pg.draw.rect(surface, (0, 200, 0), (*pos, *entity.get_dim()))

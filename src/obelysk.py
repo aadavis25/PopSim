@@ -3,7 +3,6 @@ from src.entity import Entity
 
 
 class Obelysk(Entity):
-
     def __init__(self, pos, race):
         super().__init__(pos, obelysk_dim)
         self._race = race

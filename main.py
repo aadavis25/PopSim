@@ -5,7 +5,14 @@ from threading import Event, Lock, Thread
 
 import pygame as pg
 
-from src.const import NANOSECONDS_PER_SECOND, PEOPLE, tick_speed_ns, TITLE, WINDOW_HEIGHT, WINDOW_WIDTH
+from src.const import (
+    NANOSECONDS_PER_SECOND,
+    PEOPLE,
+    TICK_INTERVAL_NS,
+    TITLE,
+    WINDOW_HEIGHT,
+    WINDOW_WIDTH,
+)
 from src.renderer import GridRenderer
 from src.world import World
 
@@ -25,9 +32,15 @@ def positive_int(value):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(prog="PopSim")
-    parser.add_argument("-w", "--width", default=WINDOW_WIDTH, type=positive_int, help="world width")
-    parser.add_argument("--height", default=WINDOW_HEIGHT, type=positive_int, help="world height")
-    parser.add_argument("-p", "--population", default=PEOPLE, type=positive_int, help="number of people")
+    parser.add_argument(
+        "-w", "--width", default=WINDOW_WIDTH, type=positive_int, help="world width"
+    )
+    parser.add_argument(
+        "--height", default=WINDOW_HEIGHT, type=positive_int, help="world height"
+    )
+    parser.add_argument(
+        "-p", "--population", default=PEOPLE, type=positive_int, help="number of people"
+    )
     return parser.parse_args(argv)
 
 
@@ -84,7 +97,7 @@ class Game:
             with self._world_lock:
                 self.the_world.tick()
             elapsed = clock() - start
-            remaining = tick_speed_ns - elapsed
+            remaining = TICK_INTERVAL_NS - elapsed
             if remaining > 0:
                 if not stop_event.is_set():
                     wait(remaining / NANOSECONDS_PER_SECOND)

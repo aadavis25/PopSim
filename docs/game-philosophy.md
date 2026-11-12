@@ -8,7 +8,7 @@ The code currently represents tribes as `Race` objects named Blue, Red, Yellow, 
 
 ## Time and energy
 
-A `World.tick()` is the unit of simulation time. Durations, waits, and cooldowns belong in ticks, not wall-clock time. The runtime targets 60 ticks per second.
+A `World.tick()` is the unit of simulation time. Durations, waits, and cooldowns belong in ticks, not wall-clock time. The tick rate is set by `TICKS_PER_SECOND` in `src/const.py` (currently 30).
 
 Humans normally move one tile every two ticks; the fastest movement cadence is one tile per tick.
 

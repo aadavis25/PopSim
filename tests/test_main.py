@@ -6,7 +6,13 @@ import pygame as pg
 import pytest
 import main
 
-from src.const import PEOPLE, WINDOW_HEIGHT, WINDOW_WIDTH, tick_speed_ns
+from src.const import (
+    NANOSECONDS_PER_SECOND,
+    PEOPLE,
+    TICK_INTERVAL_NS,
+    WINDOW_HEIGHT,
+    WINDOW_WIDTH,
+)
 from src.entity import Entity
 from src.food_node import FoodNode
 from src.house import House
@@ -72,7 +78,9 @@ def test_parse_args_uses_defaults_and_long_height_option():
     args = main.parse_args([])
 
     assert (args.width, args.height, args.population) == (
-        WINDOW_WIDTH, WINDOW_HEIGHT, PEOPLE,
+        WINDOW_WIDTH,
+        WINDOW_HEIGHT,
+        PEOPLE,
     )
     args = main.parse_args(["--width", "320", "--height", "240", "--population", "7"])
     assert (args.width, args.height, args.population) == (320, 240, 7)
@@ -244,7 +252,8 @@ def test_world_loop_waits_for_remaining_tick_budget():
     game._world_lock = threading.Lock()
     game.the_world = FakeWorld(10, 10, 0)
     stop_event = threading.Event()
-    clock_values = iter((0, 10_000_000))
+    elapsed_ns = TICK_INTERVAL_NS / 2
+    clock_values = iter((0, elapsed_ns))
     waits = []
 
     def wait(seconds):
@@ -254,8 +263,9 @@ def test_world_loop_waits_for_remaining_tick_budget():
     game.world_loop(stop_event, clock=lambda: next(clock_values), wait=wait)
 
     assert game.the_world.tick_count == 1
-    assert tick_speed_ns == pytest.approx(1_000_000_000 / 60)
-    assert waits == pytest.approx([(tick_speed_ns - 10_000_000) / 1_000_000_000])
+    assert waits == pytest.approx(
+        [(TICK_INTERVAL_NS - elapsed_ns) / NANOSECONDS_PER_SECOND]
+    )
 
 
 def test_world_loop_logs_overrun_without_sleeping(caplog):
@@ -265,7 +275,7 @@ def test_world_loop_logs_overrun_without_sleeping(caplog):
     stop_event = threading.Event()
     waits = []
     game.the_world.on_tick = stop_event.set
-    clock_values = iter((0, 20_000_000))
+    clock_values = iter((0, TICK_INTERVAL_NS + 1))
     caplog.set_level(logging.WARNING)
 
     game.world_loop(
@@ -284,7 +294,7 @@ def test_world_loop_does_not_warn_or_wait_at_exact_tick_budget(caplog):
     game.the_world = FakeWorld(10, 10, 0)
     stop_event = threading.Event()
     game.the_world.on_tick = stop_event.set
-    clock_values = iter((0, tick_speed_ns))
+    clock_values = iter((0, TICK_INTERVAL_NS))
     waits = []
     caplog.set_level(logging.WARNING)
 

@@ -11,17 +11,14 @@ See [docs/game-philosophy.md](docs/game-philosophy.md) for the game’s design p
 Setup and run
 -------------
 
-Run `./setup.sh`, then launch with the virtual environment's Python:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and [just](https://github.com/casey/just#installation), then run `just setup` from the project root. Launch with `just run`; pass application arguments after the recipe, quoting options that begin with `-`, for example `just run '--width' 80`.
 
-- Unix: `./venv/bin/python main.py`
-- Windows Git Bash: `./venv/Scripts/python.exe main.py`
+Recipes:
 
-Optional arguments: `-w`/`--width`, `--height`, and `-p`/`--population`. All values must be positive integers.
-
-Tests
------
-
-Run pytest from the virtual environment:
-
-- Unix: `./venv/bin/pytest`
-- Windows Git Bash: `./venv/Scripts/pytest.exe`
+- `just setup`: sync dependencies from `uv.lock`
+- `just run`: launch PopSim
+- `just test`: run pytest
+- `just lint`: run Ruff checks
+- `just check`: run lint and tests
+- `just format`: format Python files
+- `just lock`: update `uv.lock`
