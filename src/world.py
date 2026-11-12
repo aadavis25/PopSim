@@ -9,6 +9,7 @@ from src.entity import Entity
 from src.food_node import FoodNode
 from src.human import Human
 from src.obelysk import Obelysk
+from src.race import Race
 from src.world_square import WorldSquare
 
 
@@ -37,23 +38,24 @@ class World:
         self._random_entity_choices = None
         self._is_ticking = False
         self._entities_to_add = set()
+        self._races = [Race(name, color) for name, color in races]
 
         for i in range(people):
             human = Human(
                 self,
                 self.random_pos(),
                 random.choice(personalities),
-                random.choice(races),
+                random.choice(self._races),
             )
             self.get_at(human.get_pos()).append(human)
             self._entities.add(human)
         for i in range(FOOD_NODES):
             food_node = FoodNode(self.random_pos())
             self.put_entity(food_node)
-        for race in races:
-            o = Obelysk(self.random_pos(obelysk_dim), race)
-            race.set_obelysk(o)
-            self.put_entity(o)
+        for race in self._races:
+            obelisk = Obelysk(self.random_pos(obelysk_dim), race)
+            race.set_obelysk(obelisk)
+            self.put_entity(obelisk)
 
     def random_pos(self, dim=None):
         if dim is None:

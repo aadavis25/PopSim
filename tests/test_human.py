@@ -4,7 +4,7 @@ import pytest
 
 from src.const import marry_chance, max_energy, marry_gender
 from src.entity import Entity
-from src.human import Human
+from src.human import Human, HumanTarget
 from src.memory import Memory
 from src.obelysk import Obelysk
 from src.race import Race
@@ -21,7 +21,7 @@ def test_do_something_retargets_friend_from_old_memory(monkeypatch):
     human._energy = 1
     human._napping = False
     human._house = None
-    human._target = [None, 0]
+    human._target = HumanTarget(None, 0)
     human._the_call = 1
     human._can_see = set()
     human._friends = {friend}
@@ -37,13 +37,13 @@ def test_do_something_retargets_friend_from_old_memory(monkeypatch):
     human.do_something()
 
     assert walkabout_calls == []
-    assert human.get_target()[0] is friend
+    assert human.get_target().entity is friend
 
 
 def make_moving_human(monkeypatch):
     human = Human(None, [0, 0], "A", Race("Blue", (0, 0, 255)))
     human._world = FakeWorld()
-    human._target = [Entity([10, 0]), 0]
+    human._target = HumanTarget(Entity([10, 0]), 0)
     monkeypatch.setattr(human, "look_around", lambda: None)
     monkeypatch.setattr(human, "interact", lambda: None)
     return human
@@ -103,12 +103,12 @@ def test_exhausted_human_returns_to_home(monkeypatch):
     home = Entity([10, 0])
     human._house = home
     human._energy = 0
-    human._target = [None, 0]
+    human._target = HumanTarget(None, 0)
     monkeypatch.setattr(human, "am_at_house", lambda: False)
 
     human.do_something()
 
-    assert human.get_target()[0] is home
+    assert human.get_target().entity is home
 
 
 def test_exhausted_human_without_home_returns_to_own_obelisk(monkeypatch):
@@ -117,11 +117,11 @@ def test_exhausted_human_without_home_returns_to_own_obelisk(monkeypatch):
     human.get_race().set_obelysk(obelisk)
     human._house = None
     human._energy = 0
-    human._target = [None, 0]
+    human._target = HumanTarget(None, 0)
 
     human.do_something()
 
-    assert human.get_target()[0] is obelisk
+    assert human.get_target().entity is obelisk
 
 
 def test_talking_exhaustion_ends_conversation_and_returns_to_obelisk(monkeypatch):
@@ -140,7 +140,7 @@ def test_talking_exhaustion_ends_conversation_and_returns_to_obelisk(monkeypatch
     assert human.get_energy() == 0
     assert human.talking_to == [None, 0]
     assert partner.talking_to == [None, 0]
-    assert human.get_target()[0] is obelisk
+    assert human.get_target().entity is obelisk
 
 
 def test_exhausted_human_at_home_restores_energy(monkeypatch):
@@ -159,7 +159,7 @@ def test_home_rest_recovers_and_wakes_at_max_energy(monkeypatch):
     human = make_moving_human(monkeypatch)
     human._house = Entity([0, 0])
     human._energy = 0
-    human._target = [None, 0]
+    human._target = HumanTarget(None, 0)
     monkeypatch.setattr(human, "am_at_house", lambda: True)
 
     for _ in range(max_energy // 5):
@@ -174,7 +174,7 @@ def test_interact_does_not_start_conversation_with_busy_human(busy_state):
     race = Race("Blue", (0, 0, 255))
     human = Human(FakeWorld(), [0, 0], "A", race)
     target = Human(FakeWorld(), [1, 0], "A", race)
-    old_target = [Entity([8, 8]), 12]
+    old_target = HumanTarget(Entity([8, 8]), 12)
     target.set_target(old_target)
     if busy_state == "napping":
         target._napping = True
@@ -184,7 +184,7 @@ def test_interact_does_not_start_conversation_with_busy_human(busy_state):
         target.talking_to = [SimpleNamespace(), 5]
 
     human._nearby = {target}
-    human.set_target([target, 0])
+    human.set_target(HumanTarget(target, 0))
 
     human.interact()
 
@@ -222,9 +222,7 @@ def test_can_be_friends_uses_value_equality_for_chance(monkeypatch):
 
     human = Human(FakeWorld(), [0, 0], "A", Race("Blue", (0, 0, 255)))
     other = Human(FakeWorld(), [1, 0], "a", Race("Red", (255, 0, 0)))
-    monkeypatch.setattr(
-        "src.human.random.randint", lambda *_: Chance(marry_chance)
-    )
+    monkeypatch.setattr("src.human.random.randint", lambda *_: Chance(marry_chance))
 
     assert human.can_be_friends(other)
 
@@ -305,3 +303,14 @@ def test_add_memory_updates_existing_memory_without_duplicates():
     assert human.remember(entity) is memory
     assert memory.get_time() == 20
     assert human.remember(Entity([1, 1])) is None
+
+
+def test_human_target_exposes_named_fields():
+    human = Human(FakeWorld(), [0, 0], "A", Race("Blue", (0, 0, 255)))
+    entity = Entity([1, 1])
+
+    human.set_target(HumanTarget(entity, 7))
+
+    assert isinstance(human.get_target(), tuple)
+    assert human.get_target().entity is entity
+    assert human.get_target().age == 7

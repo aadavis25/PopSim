@@ -1,6 +1,6 @@
 import math
 import random
-from typing import List, Optional, Self
+from typing import List, NamedTuple, Optional, Self
 
 from src.const import (
     genders,
@@ -21,6 +21,11 @@ from src.house import House
 from src.memory import Memory
 from src.obelysk import Obelysk
 from src.race import Race
+
+
+class HumanTarget(NamedTuple):
+    entity: Optional[Entity]
+    age: int
 
 
 class Human(Entity):
@@ -81,8 +86,8 @@ class Human(Entity):
                             and random.randint(1, marry_chance) == marry_chance
                         ):
                             self.get_married(other)
-            if self._target[0] in self._nearby:
-                other = self._target[0]
+            if self._target.entity in self._nearby:
+                other = self._target.entity
                 self.clear_target()
             else:
                 other = random.choice(list(self._nearby))
@@ -103,7 +108,7 @@ class Human(Entity):
                     self.nap()
 
     def clear_target(self):
-        self._target = [None, 0]
+        self._target = HumanTarget(None, 0)
 
     def get_married(self, other: Self):
         if self._spouse or other._spouse:
@@ -137,21 +142,21 @@ class Human(Entity):
             if self._house and self.am_at_house():
                 self.nap()
                 return
-            self._target = [self._house or self.get_obelysk(), 0]
+            self._target = HumanTarget(self._house or self.get_obelysk(), 0)
         elif self._napping and self._house and self.am_at_house():
             self.nap()
             return
         if self.talking_to[0]:
             return
         if (
-            self._target[0]
-            and self._target[1] >= max_target_ticks
-            and type(self._target[0]) not in [Obelysk, House]
+            self._target.entity
+            and self._target.age >= max_target_ticks
+            and type(self._target.entity) not in [Obelysk, House]
         ):
             self.clear_target()
         if self._energy > 0 and not self._the_call:
-            self._target = [self.get_obelysk(), 0]
-        if not self._target[0]:
+            self._target = HumanTarget(self.get_obelysk(), 0)
+        if not self._target.entity:
             for e in self._can_see:
                 if (
                     type(e) is Human
@@ -160,26 +165,26 @@ class Human(Entity):
                     and e not in self._know
                     and not e.talking_to[0]
                 ):
-                    self._target = [e, 0]
+                    self._target = HumanTarget(e, 0)
                     self.summon(e)
                     break
-        if self._target[0]:
+        if self._target.entity:
             self._movement_ticks += 1
             if self._movement_ticks >= self._ticks_per_move:
-                self.move_toward(self._target[0])
+                self.move_toward(self._target.entity)
                 self._movement_ticks = 0
-            self._target[1] += 1
+            self._target = HumanTarget(self._target.entity, self._target.age + 1)
         else:
             for e in self._friends:
                 mem = self.remember(e)
                 if self._world.get_time() - mem.get_time() >= want_to_see_ticks:
-                    self._target = [e, -9999]
+                    self._target = HumanTarget(e, -9999)
                     break
-        if not self._target[0]:
+        if not self._target.entity:
             self.walkabout()
 
     def summon(self, other: Self):
-        other.set_target([self, 0])
+        other.set_target(HumanTarget(self, 0))
 
     def move_rand(self):
         self._pos[0] += random.randint(-1, 1)
@@ -274,10 +279,10 @@ class Human(Entity):
     def get_race(self):
         return self._race
 
-    def get_target(self):
+    def get_target(self) -> HumanTarget:
         return self._target
 
-    def set_target(self, target: List[Entity | int]):
+    def set_target(self, target: HumanTarget):
         self._target = target
 
     def get_energy(self):
@@ -290,7 +295,7 @@ class Human(Entity):
         return self.get_race().get_obelysk()
 
     def walkabout(self):
-        self._target = [self._world.get_random_entity(exclude=self), 0]
+        self._target = HumanTarget(self._world.get_random_entity(exclude=self), 0)
 
     def calling(self):
         return not self._the_call

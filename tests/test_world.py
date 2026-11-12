@@ -47,11 +47,14 @@ def test_constructor_builds_height_rows_and_width_columns_and_registers_populati
     monkeypatch.setattr(World, "_world_dim", [500, 500])
     monkeypatch.setattr(World, "_entities", set())
     monkeypatch.setattr(World, "random_pos", lambda self, dim=None: [2, 3])
-    monkeypatch.setattr(World, "put_entity", lambda self, entity: None)
+    added_entities = []
+    monkeypatch.setattr(
+        World, "put_entity", lambda self, entity: added_entities.append(entity)
+    )
     monkeypatch.setattr(
         world_module,
         "races",
-        [Race("Blue", (0, 0, 255)), Race("Red", (255, 0, 0))],
+        [("Blue", (0, 0, 255)), ("Red", (255, 0, 0))],
     )
 
     world = World(12, 14, 2)
@@ -66,6 +69,35 @@ def test_constructor_builds_height_rows_and_width_columns_and_registers_populati
     assert len(humans) == 2
     assert {tuple(human.get_pos()) for human in humans} == {(2, 3)}
     assert world.get_at([2, 3]).get_entities() == humans
+
+    races = {
+        entity.get_race()
+        for entity in added_entities
+        if isinstance(entity, world_module.Obelysk)
+    }
+    assert {race.get_name() for race in races} == {"Blue", "Red"}
+    assert all(race.get_obelysk().get_race() is race for race in races)
+    assert all(human.get_race() in races for human in humans)
+
+
+def test_world_creates_race_objects_per_world(monkeypatch):
+    monkeypatch.setattr(world_module, "FOOD_NODES", 0)
+    monkeypatch.setattr(World, "_world_dim", [500, 500])
+    monkeypatch.setattr(World, "_entities", set())
+    monkeypatch.setattr(World, "random_pos", lambda self, dim=None: [2, 3])
+    added_entities = []
+    monkeypatch.setattr(
+        World, "put_entity", lambda self, entity: added_entities.append(entity)
+    )
+    monkeypatch.setattr(world_module, "races", [("Blue", (0, 0, 255))])
+
+    World(12, 14, 0)
+    first_race = added_entities.pop().get_race()
+    World(12, 14, 0)
+    second_race = added_entities.pop().get_race()
+
+    assert first_race is not second_race
+    assert first_race.get_obelysk() is not second_race.get_obelysk()
 
 
 def test_random_pos_stays_inside_requested_entity_bounds(monkeypatch):
@@ -357,4 +389,4 @@ def test_human_walkabout_does_not_select_itself():
 
     human.walkabout()
 
-    assert human.get_target()[0] is other
+    assert human.get_target().entity is other

@@ -39,10 +39,11 @@ def len_minus_one(arr):
     return len(arr) - 1
 
 
-races = [
-    {"Blue", (0, 0, 255)},
-    {"Red", (255, 0, 0)},
-    {"Yellow", (255, 255, 0)},
-    {"Pearl", (192, 192, 192)},
-]
+races = (
+    ("Blue", (0, 0, 255)),
+    ("Red", (255, 0, 0)),
+    ("Yellow", (255, 255, 0)),
+    ("Pearl", (192, 192, 192)),
+)
+
 max_target_ticks = 300
