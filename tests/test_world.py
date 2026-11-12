@@ -1,5 +1,6 @@
 import random
 
+from src.const import interact_dist, see_dist
 from src import world as world_module
 from src.entity import Entity
 from src.race import Race
@@ -22,12 +23,11 @@ class MovingEntity(Entity):
 def make_world(width=6, height=7):
     world = World.__new__(World)
     world._world_dim = [width, height]
-    world._world = [
-        [WorldSquare([x, y]) for x in range(width)]
-        for y in range(height)
-    ]
+    world._world = [[WorldSquare([x, y]) for x in range(width)] for y in range(height)]
     world._entities = set()
     world._time = 0
+    world._is_ticking = False
+    world._entities_to_add = set()
     return world
 
 
@@ -40,7 +40,9 @@ def test_coordinate_accessors_name_width_and_height_axes():
     assert world_module.get_y([3, 7]) == 7
 
 
-def test_constructor_builds_height_rows_and_width_columns_and_registers_population(monkeypatch):
+def test_constructor_builds_height_rows_and_width_columns_and_registers_population(
+    monkeypatch,
+):
     monkeypatch.setattr(world_module, "FOOD_NODES", 0)
     monkeypatch.setattr(World, "_world_dim", [500, 500])
     monkeypatch.setattr(World, "_entities", set())
@@ -58,7 +60,9 @@ def test_constructor_builds_height_rows_and_width_columns_and_registers_populati
     assert all(len(row) == 12 for row in world._world)
     assert world.get_world_dim() == [12, 14]
     assert world.get_time() == 0
-    humans = {entity for entity in world.get_entities() if type(entity) is world_module.Human}
+    humans = {
+        entity for entity in world.get_entities() if type(entity) is world_module.Human
+    }
     assert len(humans) == 2
     assert {tuple(human.get_pos()) for human in humans} == {(2, 3)}
     assert world.get_at([2, 3]).get_entities() == humans
@@ -72,9 +76,7 @@ def test_random_pos_stays_inside_requested_entity_bounds(monkeypatch):
     positions = [world.random_pos([2, 3]) for _ in range(100)]
 
     assert all(
-        world.valid_pos(x, y)
-        and world.valid_pos(x + 1, y + 2)
-        for x, y in positions
+        world.valid_pos(x, y) and world.valid_pos(x + 1, y + 2) for x, y in positions
     )
 
 
@@ -93,7 +95,14 @@ def test_get_adjacent_nodes_returns_eight_neighbors_and_clips_at_edges():
     world = make_world()
 
     assert positions(world.get_adjacent_nodes([3, 3])) == {
-        (2, 2), (2, 3), (2, 4), (3, 2), (3, 4), (4, 2), (4, 3), (4, 4),
+        (2, 2),
+        (2, 3),
+        (2, 4),
+        (3, 2),
+        (3, 4),
+        (4, 2),
+        (4, 3),
+        (4, 4),
     }
     assert positions(world.get_adjacent_nodes([0, 0])) == {(0, 1), (1, 0), (1, 1)}
 
@@ -123,7 +132,11 @@ def test_get_nodes_within_uses_euclidean_distance_and_clips_to_grid():
     world = make_world(width=6, height=7)
 
     assert positions(world.get_nodes_within([3, 3], 1)) == {
-        (3, 3), (2, 3), (4, 3), (3, 2), (3, 4),
+        (3, 3),
+        (2, 3),
+        (4, 3),
+        (3, 2),
+        (3, 4),
     }
     assert positions(world.get_nodes_within([0, 0], 1)) == {(0, 0), (1, 0), (0, 1)}
     assert positions(world.get_nodes_within([5, 6], 0)) == {(5, 6)}
@@ -168,7 +181,10 @@ def test_put_entity_registers_all_occupied_cells_for_its_dimensions():
     expected = {(x, y) for x in (1, 2) for y in (2, 3, 4)}
     assert entity in world.get_entities()
     assert all(entity in world.get_at([x, y]).get_entities() for x, y in expected)
-    assert sum(entity in square.get_entities() for row in world._world for square in row) == 6
+    assert (
+        sum(entity in square.get_entities() for row in world._world for square in row)
+        == 6
+    )
 
 
 def test_put_entity_moves_overlap_to_nearest_available_neighbor():
@@ -224,3 +240,81 @@ def test_world_dimension_and_entity_accessors():
     assert world.get_world_dim() == [6, 7]
     assert world.get_max_dim() == 5
     assert world.get_random_entity() is entity
+
+
+def test_human_look_around_classifies_visible_and_nearby_footprints():
+    world = make_world(width=12, height=12)
+    human_pos = [0, 0]
+    human = world_module.Human(
+        world,
+        human_pos,
+        "A",
+        Race("Blue", (0, 0, 255)),
+    )
+    entities = [
+        MovingEntity([2, 0]),
+        MovingEntity([2, 2]),
+        MovingEntity([7, 7]),
+        MovingEntity([10, 0]),
+        MovingEntity([11, 0]),
+        MovingEntity([0, 0], dim=[2, 2]),
+    ]
+
+    for entity in entities:
+        x, y = entity.get_pos()
+        width, height = entity.get_dim()
+        for cell_x in range(x, x + width):
+            for cell_y in range(y, y + height):
+                world.get_at([cell_x, cell_y]).append(entity)
+
+    human.look_around()
+
+    def within_radius(entity, radius):
+        x, y = entity.get_pos()
+        width, height = entity.get_dim()
+        return any(
+            (cell_x - human_pos[0]) ** 2 + (cell_y - human_pos[1]) ** 2 <= radius**2
+            for cell_x in range(x, x + width)
+            for cell_y in range(y, y + height)
+        )
+
+    assert human._can_see == {
+        entity for entity in entities if within_radius(entity, see_dist)
+    }
+    assert human._nearby == {
+        entity for entity in entities if within_radius(entity, interact_dist)
+    }
+
+
+def test_entity_added_during_tick_is_placed_between_ticks_and_ticks_next():
+    world = make_world()
+    added_entity = MovingEntity([3, 3])
+
+    class AddingEntity(MovingEntity):
+        def __init__(self):
+            super().__init__([1, 1])
+            self._entity_to_add = added_entity
+
+        def tick(self):
+            self.tick_count += 1
+            if self._entity_to_add is not None:
+                entity_to_add = self._entity_to_add
+                self._entity_to_add = None
+                world.put_entity(entity_to_add)
+                assert entity_to_add not in world.get_entities()
+                assert (
+                    entity_to_add
+                    not in world.get_at(entity_to_add.get_pos()).get_entities()
+                )
+
+    world.put_entity(AddingEntity())
+
+    world.tick()
+
+    assert added_entity.tick_count == 0
+    assert added_entity in world.get_entities()
+    assert added_entity in world.get_at([3, 3]).get_entities()
+
+    world.tick()
+
+    assert added_entity.tick_count == 1

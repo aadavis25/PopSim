@@ -93,8 +93,8 @@ Optional (**ask first**, it changes the world representation):
   - `len_minus_one`, `get_all_nodes_within` (`const.py`)
   - `get_max_dim`, `get_world_dim` (`world.py`)
   - `Entity.set_nearby`, `Human.set_can_see`, `get_energy`, `can_be_friends`, `summon`
-  - unused constants `want_to_see_ticks`, `max_interactions_per_tick`, `max_hunger`
-  - commented blocks in `human.py` (timing, hunger, friend-summon, memory-seek) and `world.py:64, 103-104`
+  - unused constants `max_interactions_per_tick`, `max_hunger`
+  - commented blocks in `human.py` (timing, hunger, friend-summon) and `world.py:64, 103-104`
 - **Constants**: mixed `snake_case` and `UPPER_CASE` in `const.py`. Typo "rezourses". `FOOD_NODES` now builds `ResourceNode`s.
 - **Types**: several annotations are wrong (`get_target_object() -> Entity` can be `None`; `set_target(List[Entity | int])` is a heterogeneous list). A target dataclass fixes both and B3.
 - **Getters/setters**: some fields are public (`House.resource`, `.built`, `.items`), others use `get_*`. Pick one. Prefer plain attributes, which is idiomatic Python.

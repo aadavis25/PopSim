@@ -4,16 +4,12 @@ import random
 from collections import deque
 from typing import Iterator
 
-from src.const import FOOD_NODES, obelysk_dim, personalities
+from src.const import FOOD_NODES, obelysk_dim, personalities, races
 from src.entity import Entity
 from src.food_node import FoodNode
 from src.human import Human
 from src.obelysk import Obelysk
-from src.race import Race
 from src.world_square import WorldSquare
-
-races = [Race('Blue', (0, 0, 255)), Race('Red', (255, 0, 0)),
-         Race('Yellow', (255, 255, 0)), Race('Pearl', (192, 192, 192))]
 
 
 def get_x(pos):
@@ -28,19 +24,26 @@ class World:
     _world_dim = [500, 500]
     _world = None
     _entities = set()
+    _nodes_within_offsets = {}
 
     def __init__(self, width, height, people):
         self._world_dim[0] = width
         self._world_dim[1] = height
-        self._world = [[WorldSquare([x, y]) for x in range(self._world_dim[0])] for y in
-                       range(self._world_dim[1])]
+        self._world = [
+            [WorldSquare([x, y]) for x in range(self._world_dim[0])]
+            for y in range(self._world_dim[1])
+        ]
         self._time = 0
+        self._is_ticking = False
+        self._entities_to_add = set()
 
         for i in range(people):
-            human = Human(self,
-                          self.random_pos(),
-                          random.choice(personalities),
-                          random.choice(races))
+            human = Human(
+                self,
+                self.random_pos(),
+                random.choice(personalities),
+                random.choice(races),
+            )
             self.get_at(human.get_pos()).append(human)
             self._entities.add(human)
         for i in range(FOOD_NODES):
@@ -54,8 +57,10 @@ class World:
     def random_pos(self, dim=None):
         if dim is None:
             dim = [1, 1]
-        return [random.randint(0, self._world_dim[0] - (dim[0] + 1)),
-                random.randint(0, self._world_dim[1] - (dim[1] + 1))]
+        return [
+            random.randint(0, self._world_dim[0] - (dim[0] + 1)),
+            random.randint(0, self._world_dim[1] - (dim[1] + 1)),
+        ]
 
     def valid_pos(self, x, y):
         return 0 <= x < self._world_dim[0] and 0 <= y < self._world_dim[1]
@@ -63,7 +68,9 @@ class World:
     def get_adjacent_nodes(self, pos):
         x, y = get_x(pos), get_y(pos)
         for neighbor_x in range(max(0, x - 1), min(self._world_dim[0] - 1, x + 1) + 1):
-            for neighbor_y in range(max(0, y - 1), min(self._world_dim[1] - 1, y + 1) + 1):
+            for neighbor_y in range(
+                max(0, y - 1), min(self._world_dim[1] - 1, y + 1) + 1
+            ):
                 if neighbor_x != x or neighbor_y != y:
                     yield self._world[neighbor_y][neighbor_x]
 
@@ -97,14 +104,26 @@ class World:
         self._time += 1
         # pool = ThreadPool(10)
         # pool.map(self.do_tick, self._entities)
-        for e in self._entities:
-            self.do_tick(e)
+        # Queue additions so placement happens only between tick iterations.
+        self._is_ticking = True
+        try:
+            for e in self._entities:
+                self.do_tick(e)
+        finally:
+            self._is_ticking = False
+            while self._entities_to_add:
+                self.put_entity(self._entities_to_add.pop())
 
     def put_entity(self, entity: Entity):
+        if self._is_ticking:
+            self._entities_to_add.add(entity)
+            return
         self._entities.add(entity)
         pos = entity.get_pos()
         if not self.nothing_here(entity, entity.get_dim()):
-            pos = self.find_first_neighbor(self.get_at(pos), self.nothing_here, entity.get_dim()).get_pos()
+            pos = self.find_first_neighbor(
+                self.get_at(pos), self.nothing_here, entity.get_dim()
+            ).get_pos()
             entity.set_pos([get_x(pos), get_y(pos)])
         width, height = entity.get_dim()
         for x in range(get_x(pos), get_x(pos) + width):
@@ -116,7 +135,9 @@ class World:
         pos = entity.get_pos()
         width, height = dim
         x, y = get_x(pos), get_y(pos)
-        if not self.valid_pos(x, y) or not self.valid_pos(x + width - 1, y + height - 1):
+        if not self.valid_pos(x, y) or not self.valid_pos(
+            x + width - 1, y + height - 1
+        ):
             return False
         for cell_x in range(x, x + width):
             for cell_y in range(y, y + height):
@@ -147,12 +168,24 @@ class World:
         return random.choice(list(self._entities))
 
     def get_nodes_within(self, pos, dist) -> Iterator[WorldSquare]:
+        offsets = self._nodes_within_offsets.get(dist)
+        if offsets is None:
+            max_distance_squared = dist * dist
+            min_offset = math.ceil(-dist)
+            max_offset = math.floor(dist)
+            offsets = []
+            for offset_x in range(min_offset, max_offset + 1):
+                for offset_y in range(min_offset, max_offset + 1):
+                    distance_squared = offset_x * offset_x + offset_y * offset_y
+                    if distance_squared <= max_distance_squared:
+                        offsets.append((offset_x, offset_y))
+            offsets = tuple(offsets)
+            self._nodes_within_offsets[dist] = offsets
+
         x, y = get_x(pos), get_y(pos)
-        min_x = max(0, math.ceil(x - dist))
-        max_x = min(self._world_dim[0] - 1, math.floor(x + dist))
-        min_y = max(0, math.ceil(y - dist))
-        max_y = min(self._world_dim[1] - 1, math.floor(y + dist))
-        for node_x in range(min_x, max_x + 1):
-            for node_y in range(min_y, max_y + 1):
-                if math.hypot(node_x - x, node_y - y) <= dist:
-                    yield self._world[node_y][node_x]
+        width, height = self._world_dim
+        for offset_x, offset_y in offsets:
+            node_x = x + offset_x
+            node_y = y + offset_y
+            if 0 <= node_x < width and 0 <= node_y < height:
+                yield self._world[node_y][node_x]

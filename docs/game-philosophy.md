@@ -10,7 +10,11 @@ The code currently represents tribes as `Race` objects named Blue, Red, Yellow, 
 
 A `World.tick()` is the unit of simulation time. Durations, waits, and cooldowns belong in ticks, not wall-clock time. The runtime targets 60 ticks per second.
 
+Humans normally move one tile every two ticks; the fastest movement cadence is one tile per tick.
+
 Activities have activity-specific durations and energy costs. Energy should be spent on activities, not passively because ticks pass; rest can restore energy. This is the intended model even where the current implementation has not caught up.
+
+In the current prototype, conversations consume one energy per active tick; movement and idle ticks do not. When energy reaches zero, humans return to their home, or to their tribe's obelisk if they have no home. At home, they rest to recover.
 
 ## Human behavior
 

@@ -23,6 +23,9 @@ obelysk_dim = [10, 10]
 food_dim = [2, 2]
 human_dim = [2, 2]
 
+# Race imports Obelysk, which needs the dimensions above.
+from src.race import Race
+
 # world
 TITLE = "Grid"
 WINDOW_WIDTH = 900
@@ -34,3 +37,12 @@ FOOD_NODES = int(WINDOW_WIDTH / 100 * WINDOW_HEIGHT / 100)
 
 def len_minus_one(arr):
     return len(arr) - 1
+
+
+races = [
+    Race("Blue", (0, 0, 255)),
+    Race("Red", (255, 0, 0)),
+    Race("Yellow", (255, 255, 0)),
+    Race("Pearl", (192, 192, 192)),
+]
+max_target_ticks = 300
